@@ -131,9 +131,16 @@ export function TeacherManagement({ onStatsUpdate }: TeacherManagementProps) {
   const handleExportTeachers = async () => {
     try {
       clearMessages();
-      await trpc.exportTeachers.query();
-      // Note: This is a stub implementation - real export would handle Buffer properly
-      setSuccess('Fitur ekspor akan segera tersedia');
+      const csvBuffer = await trpc.exportTeachers.query();
+      const blob = new Blob([csvBuffer], { type: 'text/csv;charset=utf-8;' });
+      const link = document.createElement('a');
+      link.href = URL.createObjectURL(blob);
+      link.download = 'data_guru.csv';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(link.href);
+      setSuccess('Data guru berhasil diekspor sebagai data_guru.csv');
     } catch (error) {
       console.error('Failed to export teachers:', error);
       setError('Gagal mengekspor data guru');
