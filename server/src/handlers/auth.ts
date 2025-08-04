@@ -18,8 +18,9 @@ export const login = async (input: LoginInput): Promise<User | null> => {
 
     const user = results[0];
 
-    // Simple password comparison (in production, use bcrypt)
-    if (user.password !== input.password) {
+    // Use Bun.password.verify to compare the input password with hashed password
+    const isValid = await Bun.password.verify(input.password, user.password);
+    if (!isValid) {
       return null;
     }
 

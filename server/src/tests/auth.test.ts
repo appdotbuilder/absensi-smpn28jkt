@@ -5,6 +5,7 @@ import { db } from '../db';
 import { usersTable } from '../db/schema';
 import { type LoginInput, type CreateUserInput } from '../schema';
 import { login, validateSession } from '../handlers/auth';
+import { createUser } from '../handlers/user_management';
 
 // Test user data
 const testUser: CreateUserInput = {
@@ -25,10 +26,8 @@ describe('auth handlers', () => {
 
   describe('login', () => {
     it('should return user data on valid credentials', async () => {
-      // Create test user
-      await db.insert(usersTable)
-        .values(testUser)
-        .execute();
+      // Create test user with proper password hashing
+      await createUser(testUser);
 
       const loginInput: LoginInput = {
         username: 'testuser',
@@ -47,10 +46,8 @@ describe('auth handlers', () => {
     });
 
     it('should return null for invalid username', async () => {
-      // Create test user
-      await db.insert(usersTable)
-        .values(testUser)
-        .execute();
+      // Create test user with proper password hashing
+      await createUser(testUser);
 
       const loginInput: LoginInput = {
         username: 'wronguser',
@@ -63,10 +60,8 @@ describe('auth handlers', () => {
     });
 
     it('should return null for invalid password', async () => {
-      // Create test user
-      await db.insert(usersTable)
-        .values(testUser)
-        .execute();
+      // Create test user with proper password hashing
+      await createUser(testUser);
 
       const loginInput: LoginInput = {
         username: 'testuser',
@@ -79,10 +74,8 @@ describe('auth handlers', () => {
     });
 
     it('should work for admin role', async () => {
-      // Create admin user
-      await db.insert(usersTable)
-        .values(testAdmin)
-        .execute();
+      // Create admin user with proper password hashing
+      await createUser(testAdmin);
 
       const loginInput: LoginInput = {
         username: 'admin',
@@ -111,13 +104,10 @@ describe('auth handlers', () => {
 
   describe('validateSession', () => {
     it('should return user data for valid user ID', async () => {
-      // Create test user
-      const userResult = await db.insert(usersTable)
-        .values(testUser)
-        .returning()
-        .execute();
+      // Create test user with proper password hashing
+      const userResult = await createUser(testUser);
 
-      const userId = userResult[0].id;
+      const userId = userResult.id;
 
       const result = await validateSession(userId);
 
@@ -131,10 +121,8 @@ describe('auth handlers', () => {
     });
 
     it('should return null for invalid user ID', async () => {
-      // Create test user
-      await db.insert(usersTable)
-        .values(testUser)
-        .execute();
+      // Create test user with proper password hashing
+      await createUser(testUser);
 
       const result = await validateSession(99999); // Non-existent ID
 
@@ -142,13 +130,10 @@ describe('auth handlers', () => {
     });
 
     it('should work for admin user', async () => {
-      // Create admin user
-      const adminResult = await db.insert(usersTable)
-        .values(testAdmin)
-        .returning()
-        .execute();
+      // Create admin user with proper password hashing
+      const adminResult = await createUser(testAdmin);
 
-      const adminId = adminResult[0].id;
+      const adminId = adminResult.id;
 
       const result = await validateSession(adminId);
 
