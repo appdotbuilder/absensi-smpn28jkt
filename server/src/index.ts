@@ -5,6 +5,9 @@ import 'dotenv/config';
 import cors from 'cors';
 import superjson from 'superjson';
 import { z } from 'zod';
+import { db } from './db';
+import { usersTable } from './db/schema';
+import { eq } from 'drizzle-orm';
 
 // Import schemas
 import {
@@ -205,6 +208,39 @@ const appRouter = router({
 
 export type AppRouter = typeof appRouter;
 
+async function seedUsers() {
+  console.log('Starting user seeding...');
+
+  // Check for admin user
+  const adminUser = await db.select().from(usersTable).where(eq(usersTable.username, 'admin')).execute();
+  if (adminUser.length === 0) {
+    console.log('Creating admin user...');
+    await createUser({
+      username: 'admin',
+      password: 'password123',
+      role: 'admin'
+    });
+    console.log('Admin user created.');
+  } else {
+    console.log('Admin user already exists.');
+  }
+
+  // Check for teacher user
+  const teacherUser = await db.select().from(usersTable).where(eq(usersTable.username, 'guru1')).execute();
+  if (teacherUser.length === 0) {
+    console.log('Creating teacher user...');
+    await createUser({
+      username: 'guru1',
+      password: 'password123',
+      role: 'teacher'
+    });
+    console.log('Teacher user created.');
+  } else {
+    console.log('Teacher user already exists.');
+  }
+  console.log('User seeding completed.');
+}
+
 async function start() {
   const port = process.env['SERVER_PORT'] || 2022;
   const server = createHTTPServer({
@@ -218,6 +254,9 @@ async function start() {
   });
   server.listen(port);
   console.log(`TRPC server listening at port: ${port}`);
+
+  // Call seedUsers after server starts
+  await seedUsers();
 }
 
 start();
