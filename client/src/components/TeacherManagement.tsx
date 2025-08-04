@@ -1,5 +1,5 @@
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -18,10 +18,12 @@ export function TeacherManagement({ onStatsUpdate }: TeacherManagementProps) {
   const [teachers, setTeachers] = useState<Teacher[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isImporting, setIsImporting] = useState(false);
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [formData, setFormData] = useState<CreateTeacherInput>({
     name: '',
@@ -138,6 +140,83 @@ export function TeacherManagement({ onStatsUpdate }: TeacherManagementProps) {
     }
   };
 
+  const handleImportTeachers = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    setIsImporting(true);
+    clearMessages();
+
+    try {
+      const fileContent = await file.text();
+      const lines = fileContent.split('\n').filter(line => line.trim());
+      
+      if (lines.length === 0) {
+        setError('File CSV kosong atau tidak valid');
+        return;
+      }
+
+      const teachersToImport: CreateTeacherInput[] = [];
+      const errors: string[] = [];
+
+      lines.forEach((line, index) => {
+        const lineNumber = index + 1;
+        const [name, nip] = line.split(',').map(field => field.trim());
+
+        if (!name || !nip) {
+          errors.push(`Baris ${lineNumber}: Data tidak lengkap (${line})`);
+          return;
+        }
+
+        // Basic validation for NIP (should not be empty and reasonable length)
+        if (nip.length < 3) {
+          errors.push(`Baris ${lineNumber}: NIP terlalu pendek "${nip}"`);
+          return;
+        }
+
+        teachersToImport.push({
+          name: name,
+          nip: nip,
+          user_id: null // Default to null since we're not handling user linking in CSV import
+        });
+      });
+
+      if (errors.length > 0) {
+        setError(`Terdapat ${errors.length} kesalahan:\n${errors.slice(0, 5).join('\n')}${errors.length > 5 ? '\n...' : ''}`);
+        return;
+      }
+
+      if (teachersToImport.length === 0) {
+        setError('Tidak ada data guru yang valid untuk diimpor');
+        return;
+      }
+
+      // Call bulk import API
+      const importedTeachers = await trpc.bulkImportTeachers.mutate({
+        teachers: teachersToImport
+      });
+
+      // Update local state
+      setTeachers((prev: Teacher[]) => [...prev, ...importedTeachers]);
+      setSuccess(`Berhasil mengimpor ${importedTeachers.length} guru dari file CSV`);
+      onStatsUpdate();
+
+    } catch (error) {
+      console.error('Failed to import teachers:', error);
+      setError('Gagal mengimpor data guru. Pastikan format file CSV benar.');
+    } finally {
+      setIsImporting(false);
+      // Reset file input
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
+      }
+    }
+  };
+
+  const handleImportClick = () => {
+    fileInputRef.current?.click();
+  };
+
   return (
     <div className="space-y-6">
       {/* Messages */}
@@ -213,6 +292,22 @@ export function TeacherManagement({ onStatsUpdate }: TeacherManagementProps) {
               </form>
             </DialogContent>
           </Dialog>
+
+          <Button 
+            variant="outline" 
+            onClick={handleImportClick}
+            disabled={isImporting}
+          >
+            {isImporting ? '📤 Mengimpor...' : '📤 Impor Excel'}
+          </Button>
+          
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept=".csv"
+            onChange={handleImportTeachers}
+            style={{ display: 'none' }}
+          />
 
           <Button variant="outline" onClick={handleExportTeachers}>
             📥 Ekspor Excel

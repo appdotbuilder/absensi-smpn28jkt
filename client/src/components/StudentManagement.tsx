@@ -1,5 +1,5 @@
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -20,10 +20,12 @@ export function StudentManagement({ onStatsUpdate }: StudentManagementProps) {
   const [students, setStudents] = useState<Student[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isImporting, setIsImporting] = useState(false);
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [formData, setFormData] = useState<CreateStudentInput>({
     name: '',
@@ -141,6 +143,89 @@ export function StudentManagement({ onStatsUpdate }: StudentManagementProps) {
       console.error('Failed to export students:', error);
       setError('Gagal mengekspor data siswa');
     }
+  };
+
+  const handleImportStudents = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    setIsImporting(true);
+    clearMessages();
+
+    try {
+      const fileContent = await file.text();
+      const lines = fileContent.split('\n').filter(line => line.trim());
+      
+      if (lines.length === 0) {
+        setError('File CSV kosong atau tidak valid');
+        return;
+      }
+
+      const studentsToImport: CreateStudentInput[] = [];
+      const errors: string[] = [];
+
+      lines.forEach((line, index) => {
+        const lineNumber = index + 1;
+        const [name, classLevel, classSection] = line.split(',').map(field => field.trim());
+
+        if (!name || !classLevel || !classSection) {
+          errors.push(`Baris ${lineNumber}: Data tidak lengkap (${line})`);
+          return;
+        }
+
+        // Validate class level
+        if (!['7', '8', '9'].includes(classLevel)) {
+          errors.push(`Baris ${lineNumber}: Tingkat kelas tidak valid "${classLevel}". Harus 7, 8, atau 9`);
+          return;
+        }
+
+        // Validate class section
+        if (!['A', 'B', 'C', 'D', 'E', 'F', 'G'].includes(classSection.toUpperCase())) {
+          errors.push(`Baris ${lineNumber}: Bagian kelas tidak valid "${classSection}". Harus A-G`);
+          return;
+        }
+
+        studentsToImport.push({
+          name: name,
+          class_level: classLevel as ClassLevel,
+          class_section: classSection.toUpperCase() as ClassSection
+        });
+      });
+
+      if (errors.length > 0) {
+        setError(`Terdapat ${errors.length} kesalahan:\n${errors.slice(0, 5).join('\n')}${errors.length > 5 ? '\n...' : ''}`);
+        return;
+      }
+
+      if (studentsToImport.length === 0) {
+        setError('Tidak ada data siswa yang valid untuk diimpor');
+        return;
+      }
+
+      // Call bulk import API
+      const importedStudents = await trpc.bulkImportStudents.mutate({
+        students: studentsToImport
+      });
+
+      // Update local state
+      setStudents((prev: Student[]) => [...prev, ...importedStudents]);
+      setSuccess(`Berhasil mengimpor ${importedStudents.length} siswa dari file CSV`);
+      onStatsUpdate();
+
+    } catch (error) {
+      console.error('Failed to import students:', error);
+      setError('Gagal mengimpor data siswa. Pastikan format file CSV benar.');
+    } finally {
+      setIsImporting(false);
+      // Reset file input
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
+      }
+    }
+  };
+
+  const handleImportClick = () => {
+    fileInputRef.current?.click();
   };
 
   const getFloorByClass = (classLevel: ClassLevel, classSection: ClassSection): string => {
@@ -267,6 +352,22 @@ export function StudentManagement({ onStatsUpdate }: StudentManagementProps) {
               </form>
             </DialogContent>
           </Dialog>
+
+          <Button 
+            variant="outline" 
+            onClick={handleImportClick}
+            disabled={isImporting}
+          >
+            {isImporting ? '📤 Mengimpor...' : '📤 Impor Excel'}
+          </Button>
+          
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept=".csv"
+            onChange={handleImportStudents}
+            style={{ display: 'none' }}
+          />
 
           <Button variant="outline" onClick={handleExportStudents}>
             📥 Ekspor Excel
